@@ -83,6 +83,10 @@ local function sortFunction(data1, data2)
 	return ZO_TableOrderingFunction(data1, data2, 'sortOrder', DEFAULT_SORT_KEYS, ZO_SORT_ORDER_UP)
 end
 
+local function isTargetPlayer(socialData)
+	return socialData.displayName ~= nil and socialData.displayName ~= ''
+end
+
 ---------------------------------------------------------------------------------------------------------------
 -- 
 ---------------------------------------------------------------------------------------------------------------
@@ -238,6 +242,9 @@ end
 -- 
 ---------------------------------------------------------------------------------------------------------------
 function teleportList:BuildOptionsList()
+	local function ShouldAddPlayerOption()
+		return self:ShouldAddPlayerOption()
+	end
 	self:BuildGroupOptionsList()
 	self:BuildPlayerOptionsList()
 
@@ -253,7 +260,7 @@ function teleportList:BuildOptionsList()
 		return filterData
 	end
 
-	self:AddOptionTemplate(groupIdFavorites, function() return self:BuildCheckbox(nil, label, toggleFavoritPlayer, icon) end, function() return self.socialData.displayName ~= '' end)
+	self:AddOptionTemplate(groupIdFavorites, function() return self:BuildCheckbox(nil, label, toggleFavoritPlayer, icon) end, ShouldAddPlayerOption)
 
 	local function toggleFavoritZone()
 		local filterData = {
@@ -282,9 +289,9 @@ end
 
 function teleportList:BuildPlayerOptionsList()
 	local function ShouldAddPlayerOption()
-		return self.socialData.displayName ~= ''
+		return self:ShouldAddPlayerOption()
 	end
-
+	
 	local function BuildIgnoreOption()
 		local callback = function()
 			ZO_Dialogs_ReleaseAllDialogsOfName("BMU_GAMEPAD_SOCIAL_OPTIONS_DIALOG")
@@ -311,8 +318,8 @@ function teleportList:BuildPlayerOptionsList()
 	self:AddOptionTemplate(groupId, ZO_SocialOptionsDialogGamepad.BuildInviteToGroupOption, ShouldAddInviteToGroupOptionAndCanSelectedDataBeInvited)
 	self:AddOptionTemplate(groupId, ZO_SocialOptionsDialogGamepad.BuildVisitPlayerHouseOption, ShouldAddPlayerOption)
 
-	self:AddOptionTemplate(groupId, BuildAddFriendOption, ZO_SocialOptionsDialogGamepad.ShouldAddFriendOption, ShouldAddPlayerOption)
-	self:AddOptionTemplate(groupId, self.BuildSendMailOption, ZO_SocialOptionsDialogGamepad.ShouldAddSendMailOption, ShouldAddPlayerOption)
+	self:AddOptionTemplate(groupId, BuildAddFriendOption, ShouldAddPlayerOption)
+	self:AddOptionTemplate(groupId, self.BuildSendMailOption, ShouldAddPlayerOption)
 
 	self:AddOptionTemplate(groupId, BuildIgnoreOption, ShouldAddPlayerOption)
 
@@ -335,11 +342,6 @@ function teleportList:BuildGroupOptionsList(groupId)
 	local function ShouldAddPromoteOption()
 		return IsUnitGroupLeader("player") and self.socialData.online and not self:SelectedDataIsPlayer()
 	end
-
-	local function CanJumpToPlayerHouse()
-	   return not self:SelectedDataIsPlayer()
-	end
-
 	self:AddOptionTemplate(groupId, self.BuildPromoteToLeaderOption, ShouldAddPromoteOption)
 	self:AddOptionTemplate(groupId, self.BuildKickMemberOption, CanKickMember)
 	self:AddOptionTemplate(groupId, self.BuildVoteKickMemberOption, CanVoteForKickMember)
@@ -387,7 +389,7 @@ function teleportList:AddInviteToGuildOptionTemplates()
             local guildId = GetGuildId(i)
             local buildFunction = function() return self:BuildGuildInviteOption(nil, guildId) end
 			local function visibleFunction()
-				if guildId ~= 0 and DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_INVITE) then
+				if guildId ~= 0 and DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_INVITE) and self.socialData.displayName ~= '' then
 					return GetGuildMemberIndexFromDisplayName(guildId, self.socialData.displayName) == nil
 				end
 
@@ -404,6 +406,10 @@ function teleportList:BuildGuildInviteOption(header, guildId)
         end
 
     return self:BuildOptionEntry(header, GetGuildName(guildId), inviteFunction, nil, GetLargeAllianceSymbolIcon(GetGuildAlliance(guildId)))
+end
+
+function teleportList:ShouldAddPlayerOption()
+	return self.socialData.displayName ~= nil and self.socialData.displayName ~= ''
 end
 
 ---------------------------------------------------------------------------------------------------------------
