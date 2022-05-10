@@ -10,6 +10,8 @@ local strings = {
 	
 	SI_BMU_GAMEPAD_PAN_TO_GROUP			= "Focus in on group member",
 	SI_BMU_GAMEPAD_PAN_TO_GROUP_TOOLTIP	= "Focus in on group member",
+	
+	SI_BMU_GAMEPAD_MANAGE_FAVORITES		= 'Manage Favorites',
 }
 
 for stringId, stringValue in pairs(strings) do

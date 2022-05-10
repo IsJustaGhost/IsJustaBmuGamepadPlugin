@@ -275,7 +275,7 @@ function teleportList:BuildOptionsList()
 			ZO_Dialogs_ReleaseDialogOnButtonPress("BMU_GAMEPAD_SOCIAL_OPTIONS_DIALOG")
 		end
 
-		return self:BuildOptionEntry(nil, 'Manage Favorites', callback)
+		return self:BuildOptionEntry(nil, SI_BMU_GAMEPAD_MANAGE_FAVORITES, callback)
 	end
 	self:AddOptionTemplate(groupIdFavorites, manageFavoritesSetup)
 end
