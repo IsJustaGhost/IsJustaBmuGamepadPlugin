@@ -63,39 +63,61 @@ local function highlightText(label)
 	return '|cFFFFFF' .. label-- .. 'r|'
 end
 
-local function getTargetTooltipData(targetData)
-	local tooltipData = {}
-	local tooltipTextLevel = ""
-
-
-	--------- player tooltip ---------
-	if targetData.displayName ~= "" and targetData.championRank then
-		-- set level text for player tooltip
-		if targetData.championRank >= 1 then
-			tooltipTextLevel = "CP " .. targetData.championRank
-		else
-			tooltipTextLevel = targetData.level
-		end
-
-
-		tooltipData = {highlightText(targetData.displayName), targetData.characterName, tooltipTextLevel, targetData.allianceName}
-		-- add source text
-		-- add separator
-		table.insert(tooltipData, BMU.textures.tooltipSeperator)
-		for _, sourceText in pairs(targetData.sourcesText) do
-			table.insert(tooltipData, sourceText)
-		end
-	end
-	------------------
-
-
-	--------- zone tooltip (and zone name)  and handler for map opening ---------
-	-- if search for related items and info not already added
-	if targetData.relatedItems ~= nil and #targetData.relatedItems > 0 then
+local function addTooltipData(tooltipData, data)
+	if data then
 		if #tooltipData > 0 then
 			-- add separator
 			table.insert(tooltipData, BMU.textures.tooltipSeperator)
 		end
+		if type(data) == 'table' then
+			for k, entry in pairs(data) do
+				table.insert(tooltipData, entry)
+			end
+		else
+			table.insert(tooltipData, data)
+		end
+	else
+		table.insert(tooltipData, BMU.textures.tooltipSeperator)
+	end
+end
+
+local function getTargetTooltipData(targetData)
+	local tooltipData = {}
+	local tooltipTextLevel = ""
+
+	-- Second language for zone names
+	-- if second language is selected & entry is a real zone & zoneNameSecondLanguage exists
+	if BMU.savedVarsAcc.secondLanguage ~= 1 and targetData.zoneNameClickable == true and targetData.zoneNameSecondLanguage ~= nil then
+		-- add zone name
+		addTooltipData(tooltipData, targetData.zoneNameSecondLanguage)
+	end
+	------------------
+
+
+	-- wayhsrine and skyshard discovery info
+	if targetData.zoneNameClickable == true and (targetData.zoneWayhsrineDiscoveryInfo ~= nil or targetData.zoneSkyshardDiscoveryInfo ~= nil) then
+		if #tooltipData > 0 then
+			-- add separator
+	--		table.insert(tooltipData, 1, BMU.textures.tooltipSeperator)
+		end
+		
+		local discoveryInfo = {}
+		-- add discovery info
+		if targetData.zoneWayhsrineDiscoveryInfo ~= nil then
+			table.insert(discoveryInfo, targetData.zoneWayhsrineDiscoveryInfo)
+		end
+		if targetData.zoneSkyshardDiscoveryInfo ~= nil then
+			table.insert(discoveryInfo, targetData.zoneSkyshardDiscoveryInfo)
+		end
+		
+		addTooltipData(tooltipData, discoveryInfo)
+	end
+	------------------
+	
+	
+	--------- zone tooltip (and zone name)  and handler for map opening ---------
+	-- if search for related items and info not already added
+	if targetData.relatedItems ~= nil and #targetData.relatedItems > 0 then
 		if string.sub(targetData.zoneName, -1) ~= ")" then
 			-- add info about total number of related items
 			local totalItemsCountInv = 0
@@ -116,55 +138,42 @@ local function getTargetTooltipData(targetData)
 		end
 
 		-- copy item names to tooltipData
+		local relatedItems = {}
 		for index, item in ipairs(targetData.relatedItems) do
-			table.insert(tooltipData, item.itemTooltip)
+			table.insert(relatedItems, item.itemTooltip)
 		end
 
+		addTooltipData(tooltipData, relatedItems)
 
 	-- if search for related quests
 	elseif targetData.relatedQuests ~= nil and #targetData.relatedQuests > 0 then
-		if #tooltipData > 0 then
-			-- add separator
-			table.insert(tooltipData, BMU.textures.tooltipSeperator)
-		end
 		if string.sub(targetData.zoneName, -1) ~= ")" then
 			-- add info about number of related quests
 			targetData.zoneName = targetData.zoneName .. " (" .. targetData.countRelatedQuests .. ")"
 		end
 		-- copy "targetData.relatedQuests" to "tooltipData" (Attention: "=" will set pointer!)
 	--	ZO_DeepTableCopy(targetData.relatedQuests, tooltipData)
+		local relatedQuests = {}
 		for index, quest in ipairs(targetData.relatedQuests) do
-			table.insert(tooltipData, quest)
+			table.insert(relatedQuests, quest)
 		end
+		
+		addTooltipData(tooltipData, relatedQuests)
 	end
 
 
-	-- wayhsrine and skyshard discovery info
-	if targetData.zoneNameClickable == true and (targetData.zoneWayhsrineDiscoveryInfo ~= nil or targetData.zoneSkyshardDiscoveryInfo ~= nil) then
-		if #tooltipData > 0 then
-			-- add separator
-			table.insert(tooltipData, 1, BMU.textures.tooltipSeperator)
+	--------- player tooltip ---------
+	if targetData.displayName ~= "" and targetData.championRank then
+		-- set level text for player tooltip
+		if targetData.championRank >= 1 then
+			tooltipTextLevel = "CP " .. targetData.championRank
+		else
+			tooltipTextLevel = targetData.level
 		end
-		-- add discovery info
-		if targetData.zoneSkyshardDiscoveryInfo ~= nil then
-			table.insert(tooltipData, 1, targetData.zoneSkyshardDiscoveryInfo)
-		end
-		if targetData.zoneWayhsrineDiscoveryInfo ~= nil then
-			table.insert(tooltipData, 1, targetData.zoneWayhsrineDiscoveryInfo)
-		end
-	end
-	------------------
+		local playerInfo = {highlightText(targetData.displayName), targetData.characterName, tooltipTextLevel, targetData.allianceName}
 
-
-	-- Second language for zone names
-	-- if second language is selected & entry is a real zone & zoneNameSecondLanguage exists
-	if BMU.savedVarsAcc.secondLanguage ~= 1 and targetData.zoneNameClickable == true and targetData.zoneNameSecondLanguage ~= nil then
-		if #tooltipData > 0 then
-			-- add separator
-			table.insert(tooltipData, 1, BMU.textures.tooltipSeperator)
-		end
-		-- add zone name
-		table.insert(tooltipData, 1, targetData.zoneNameSecondLanguage)
+		addTooltipData(tooltipData, playerInfo)
+		addTooltipData(tooltipData, targetData.sourcesText)
 	end
 	------------------
 
@@ -172,46 +181,39 @@ local function getTargetTooltipData(targetData)
 	-- GetString(SI_TELE_UI_GOLD) .. " " .. BMU.formatGold(BMU.savedVarsAcc.savedGold)
 	-- Info if player is in same instance
 	if targetData.groupMemberSameInstance ~= nil then
-		if #tooltipData > 0 then
-			-- add separator
-			table.insert(tooltipData, BMU.textures.tooltipSeperator)
-		end
 		-- add instance info
 		if targetData.groupMemberSameInstance == true then
-			table.insert(tooltipData, BMU.var.color.colGreen .. GetString(SI_TELE_UI_SAME_INSTANCE))
+			addTooltipData(tooltipData, BMU.var.color.colGreen .. GetString(SI_TELE_UI_SAME_INSTANCE))
 		else
-			table.insert(tooltipData, BMU.var.color.colRed .. GetString(SI_TELE_UI_DIFFERENT_INSTANCE))
+			addTooltipData(tooltipData, BMU.var.color.colRed .. GetString(SI_TELE_UI_DIFFERENT_INSTANCE))
 		end
 	end
 	------------------
 
-
 	-- house tooltip
 	if targetData.houseTooltip then
-		if #tooltipData > 0 then
-			-- add separator
-			table.insert(tooltipData, BMU.textures.tooltipSeperator)
-		end
-
 		-- add house infos
 		--ZO_DeepTableCopy(targetData.houseTooltip, tooltipData)
 		local hasZoneName = false
+		local houseData = {}
 		for _, v in pairs(targetData.houseTooltip) do
 			if v == targetData.parentZoneName then
 				v = highlightText(targetData.parentZoneName)
 				hasZoneName = true
 			end
 			v = v:gsub('%|t75%:75', '|t128:128')
-			table.insert(tooltipData, v)
+			table.insert(houseData, v)
 		end
 		if not hasZoneName then
-			table.insert(tooltipData, highlightText(targetData.parentZoneName))
+			table.insert(houseData, highlightText(targetData.parentZoneName))
 		end
+		
+		addTooltipData(tooltipData, houseData)
 	end
 
 	-- guild tooltip
 	if targetData.guildTooltip then
-		ZO_DeepTableCopy(targetData.guildTooltip, tooltipData)
+		ZO_DeepTableCopy(tooltipData, targetData.guildTooltip)
 	end
 
 	return tooltipData
@@ -265,7 +267,6 @@ function TeleportClass_Shared:Initialize(control)
 	self:AddDataTemplate("ZO_GamepadMenuEntryTemplateLowercase42", ZO_SharedGamepadEntry_OnSetup, ZO_GamepadMenuEntryTemplateParametricListFunction)
 	self:AddDataTemplateWithHeader("ZO_GamepadMenuEntryTemplateLowercase42", ZO_SharedGamepadEntry_OnSetup, ZO_GamepadMenuEntryTemplateParametricListFunction, nil, "ZO_GamepadMenuEntryHeaderTemplate")
 
-
 --	self:BuildOptionsList()
 end
 
@@ -315,13 +316,6 @@ function TeleportClass_Shared:UpdateTooltip(targetData)
 	end
 	
 	
-	if targetData.zoneDesc and targetData.zoneDesc ~= '' then
-		if #tooltipData > 0 then -- add separator
-			table.insert(tooltipData, BMU.textures.tooltipSeperator)
-		end
-		table.insert(tooltipData, targetData.zoneDesc)
-	end
-	
 	if targetData.collectibleId then
 		if #tooltipData > 0 then -- add separator
 			table.insert(tooltipData, BMU.textures.tooltipSeperator)
@@ -330,16 +324,36 @@ function TeleportClass_Shared:UpdateTooltip(targetData)
 		table.insert(tooltipData, collectibleDescription)
 	end
 	
-	if targetData.parentMapId then
-		local description = select(5, GetMapInfoById(targetData.parentMapId))
+	if targetData.pinDesc and targetData.pinDesc ~= '' then
+		if #tooltipData > 0 then -- add separator
+			table.insert(tooltipData, BMU.textures.tooltipSeperator)
+		end
+		table.insert(tooltipData, targetData.pinDesc)
+	end
+	
+	if targetData.mapId then
+		local description = select(5, GetMapInfoById(targetData.mapId))
+		
+	--	local parentZoneId = GetZoneId(GetCurrentMapZoneIndex())
+		local parentZoneId = targetData.parentZoneId
+		local zoneName = GetZoneNameById(parentZoneId)
+		
 		if description == '' then
-			description = select(5, GetMapInfoById(GetMapIdByZoneId(targetData.zoneId)))
+			-- If the parent zone is a subzone then let's get the subzone's parent
+			parentZoneId = GetParentZoneId(parentZoneId)
+			zoneName = GetZoneNameById(parentZoneId)
+			description = select(5, GetMapInfoById(GetMapIdByZoneId(parentZoneId)))
 		end
 		
 		if description ~= '' then
 			if #tooltipData > 0 then -- add separator
 				table.insert(tooltipData, BMU.textures.tooltipSeperator)
 			end
+			
+			if targetData.zoneId ~= targetData.parentZoneId then
+				table.insert(tooltipData, highlightText(zoneName))
+			end
+			
 			table.insert(tooltipData, description)
 		end
 	end
