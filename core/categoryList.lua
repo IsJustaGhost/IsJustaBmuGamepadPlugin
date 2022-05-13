@@ -734,7 +734,7 @@ function categoryList:Refresh()
 			if lastFilterType ~= data.filterType then
 				lastFilterType = data.filterType
 				entryData:SetHeader(getHeaderString('CATEGORY', data.filterType))
-				self:AddEntry("ZO_GamepadMenuEntryTemplateLowercase42WithHeader", entryData)
+				self:AddEntryWithHeader("ZO_GamepadMenuEntryTemplateLowercase42", entryData)
 			else
 				self:AddEntry("ZO_GamepadMenuEntryTemplateLowercase42", entryData)
 			end

@@ -167,6 +167,7 @@ function addon:RefreshHeader()
 end
 
 function addon:CreateSettings()
+	if not BMU.var.optionsTable then return end
 	local controls = {
 		{ -- "Can Research"
 			type = "checkbox",
@@ -232,7 +233,6 @@ function addon:UpdatePortalPlayers()
 				end
 
 				if data.numberPlayers then
-					local numPlayers = data.numberPlayers:gsub('%{(\d+)%)', '\1')
 					local zoneIndex = data.zoneIndex or GetZoneIndex(data.zoneId)
 					if not playersPerZone[zoneIndex] then
 						playersPerZone[zoneIndex] = data.numberPlayers
@@ -250,6 +250,7 @@ end
 
 function addon:CreateTestList(filter)
 	if not self.teleportList then return end
+	
 	local portalPlayers = {}
 	playersPerZone = {}
 
@@ -313,14 +314,13 @@ function addon:CreateTestList(filter)
 			end
 		end
 	end
-		
-		
+
 	for k, data in pairs(teleporterList) do
 		if data.category and data.category > 0 or data.guildId ~= nil then
 			if not categoryData.categoryFilter or categoryData.categoryFilter(data) then
 
 				data.categoryType = categoryData.categoryType
-
+				data.category = BMU.categorizeZone(data.zoneId) or 9
 				if categoryData.filter.index > 9 then
 					BMU_Gamepad_EntryData:CreateMultiEntry(data, dataTable)
 				else
@@ -333,15 +333,17 @@ function addon:CreateTestList(filter)
 		end
 	end
 
+	BMU.changeState(0)
+	
 	self.portalPlayers = portalPlayers
 
-			self:RefreshHeader()
+	self:RefreshHeader()
 
-			if not self.categoryList.fragment:IsHidden() then
-				self.categoryList:RefreshKeybind()
-			elseif not self.teleportList.fragment:IsHidden() then
-				self.teleportList:Refresh()
-			end
+	if not self.categoryList.fragment:IsHidden() then
+		self.categoryList:RefreshKeybind()
+	elseif not self.teleportList.fragment:IsHidden() then
+		self.teleportList:Refresh()
+	end
 			
 --	GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData = nil
 	GAMEPAD_WORLD_MAP_LOCATIONS:BuildLocationList()
@@ -374,7 +376,8 @@ function addon:RegisterEvents()
 		if categoryData.filter.index == 8 then
 			categoryData.filter.fZoneId = GetZoneId(GetCurrentMapZoneIndex())
 		end
-
+		
+	--	BMU.changeState(categoryData.filter.index)
 		if categoryData.callback then
 			categoryData.callback(categoryData.filter)
 			if categoryData.categoryType ~= 9 then
@@ -468,7 +471,7 @@ end
 function IJA_BMU_Initialize( ... )
 	IJA_BMU_GAMEPAD_PLUGIN = addon:New( ... )
 end
-
+	
 
 
 
