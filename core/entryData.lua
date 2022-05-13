@@ -1,8 +1,11 @@
 local addon = IJA_BMU_GAMEPAD_PLUGIN
 
 --[[
-
-get strings for quest headers
+	Updated how mapInfo is updated
+	
+	
+	
+	get strings for quest headers
 
 ]]
 
@@ -54,34 +57,13 @@ local function getHeaderString(headerType, headerIndex)
 	return HEADER_STRINGS[headerType .. headerIndex]
 end
 
-local original_CALLBACK_MANAGER = CALLBACK_MANAGER
-local setMapById = ZO_WorldMap_SetMapById
-if not setMapById then
-	setMapById = function(mapId)
-		CALLBACK_MANAGER = {FireCallbacks = function() end}
-
-		ZO_WorldMap_SetMapByIndex(1)
-
-		CALLBACK_MANAGER = original_CALLBACK_MANAGER
-		if SetMapToMapId(mapId) == SET_MAP_RESULT_MAP_CHANGED then
-
-			CALLBACK_MANAGER:FireCallbacks("OnWorldMapChanged")
-		end
-	end
-end
-
 ---------------------------------------------------------------------------------------------------------------
 -- POI
 ---------------------------------------------------------------------------------------------------------------
 local POI_DATA = {}
 local MAP_DATA_BY_ZONE_ID = {}
-local MAX_NUM_ZONE_INDEXS = 3000
+local MAX_NUM_ZONE_INDEXS = GetNumZones()
 local CLEAN_TEST = 2 -- Some dummy zone called "Clean Test"
-
-local invalidMapContent = {
-	[MAP_CONTENT_BATTLEGROUND] = true,
-	[MAP_CONTENT_AVA] = true,
-}
 
 local missingPinInfo = {
 	[913] = { -- The Mage's Staff/Spellscar
@@ -100,11 +82,6 @@ local missingPinInfo = {
 	},
 }
 
-local parentZoneIdModifier = {
-	[1027] = 1027, -- Artaeum
-	[1283] = 1283, -- The Shambles
-}
-
 local preferedZoneIds = {
 	[1208] = true, -- Blackreach: Arkthzand Cavern
 }
@@ -112,6 +89,16 @@ local preferedZoneIds = {
 local excludedZoneIndex = {
 	[346] = true, -- Imperial City -- needed to prevent Imperial City Prison form using Imperial City as poi reference
 	[373] = true, -- Imperial Sewers -- needed to prevent White-Gold Tower form using Imperial Sewers as poi reference
+}
+
+local parentZoneIdModifier = {
+	[1027] = 1027, -- Artaeum - stop it from using Summerset as parent.
+	[1283] = 1283, -- The Shambles - stop it from using Fargrave City District as parent.
+}
+
+local invalidMapContent = {
+	[MAP_CONTENT_BATTLEGROUND] = true,
+	[MAP_CONTENT_AVA] = true,
 }
 
 local function getParentZoneId(zoneId)
@@ -159,11 +146,11 @@ do
 			local zoneData = POI_DATA[zoneIndex] or {}
 			local xLoc, zLoc, poiPinType, icon, isShownInCurrentMap, linkedCollectibleIsLocked, isDiscovered, isNearby = GetPOIMapInfo(zoneIndex, poiIndex)
 
-			local zoneDesc
+			local pinDesc
 			if HasCompletedFastTravelNodePOI(zoneIndex) then
-				zoneDesc = finishedDescription
+				pinDesc = finishedDescription
 			else
-				zoneDesc = startDescription
+				pinDesc = startDescription
 			end
 
 			local entry = {
@@ -173,7 +160,7 @@ do
 					name = objectiveName,
 				},
 				icon = icon,
-				zoneDesc = zoneDesc,
+				pinDesc = pinDesc,
 				parentZoneId = zoneId,
 				parentZoneName = GetZoneNameById(zoneId),
 			}
@@ -195,8 +182,7 @@ do
 end
 
 do
-	local numZoneIndices = GetNumZones()
-	for zoneIndex = 0, numZoneIndices do
+	for zoneIndex = 0, MAX_NUM_ZONE_INDEXS do
 		if not excludedZoneIndex[zoneIndex] then
 			for i = 1, GetNumPOIs(zoneIndex) do
 				createSinglePOIPin(zoneIndex, i)
@@ -204,7 +190,6 @@ do
 		end
 	end
 end
-
 
 local function compareNames(objectiveName, zoneName)
 	local reverseSt = objectiveName:gsub('^(%S+) (.*)$', '%2 %1')
@@ -218,16 +203,14 @@ local function compareNames(objectiveName, zoneName)
 	end
 end
 
-local function getPoiInfo(zoneName, parentZoneId)
-	local result
-	local match
+local function getPoiInfo(zoneName)
+	local result, match
 
 	for zoneIndex, zoneData in pairs(POI_DATA) do
 		for objectiveName, pinInfo in pairs(zoneData) do
 			local score = compareNames(objectiveName, zoneName)
 
 			if score then
-			--	local compare = math.abs(score - match)
 				if not match or score < match then
 					match = score
 					result = pinInfo
@@ -237,7 +220,7 @@ local function getPoiInfo(zoneName, parentZoneId)
 	end
 
 	if match then
-	--	return select(2, hasPreferedZone(result, parentZoneId))
+	--	return select(2, hasPreferedZone(result))
 		return select(2, next(result))
 	end
 end
@@ -249,15 +232,15 @@ local function getMissingPinInfo(zoneId)
 		local startDescription, finishedDescription = select(3, GetPOIInfo(entry.pinInfo.zoneIndex, entry.pinInfo.poiIndex))
 		local icon = select(4, GetPOIMapInfo(zoneIndex, poiIndex))
 
-		local zoneDesc
+		local pinDesc
 		if HasCompletedFastTravelNodePOI(entry.pinInfo.zoneIndex) then
-			zoneDesc = finishedDescription
+			pinDesc = finishedDescription
 		else
-			zoneDesc = startDescription
+			pinDesc = startDescription
 		end
 
 		entry.icon = icon
-		entry.zoneDesc = zoneDesc
+		entry.pinDesc = pinDesc
 		entry.parentZoneName = GetZoneNameById(entry.parentZoneId)
 
 		return entry
@@ -293,7 +276,7 @@ do
 		if isValid(zoneName, parentZoneId, mapContentType) then
 			local pinInfo
 			if GetMapIndexByZoneId(zoneId) == nil then
-				pinInfo = getPoiInfo(zoneName:lower(), parentZoneId, parentZoneIndex) or getMissingPinInfo(zoneId)
+				pinInfo = getPoiInfo(zoneName:lower()) or getMissingPinInfo(zoneId)
 			end
 
 			if pinInfo then
@@ -309,13 +292,21 @@ do
 			entry.parentMapId = parentMapId
 			entry.parentZoneId = parentZoneId
 			entry.parentZoneName = parentZoneName
-	--		entry.description = description
 
 			if validateMapData(entry) then
 				MAP_DATA_BY_ZONE_ID[zoneId] = entry
 			end
 		end
 	end
+end
+
+local function getMapInfo(entry)
+	local zoneData = MAP_DATA_BY_ZONE_ID[entry.zoneId]
+	
+	if zoneData then
+		return zoneData.parentZoneId, zoneData.parentMapId, zoneData.parentZoneName, zoneData.icon, zoneData.pinDesc, zoneData.pinInfo
+	end
+	return entry.parentZoneId, entry.parentMapId, entry.parentZoneName, entry.icon
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -367,6 +358,11 @@ local function discovery(total, discovered)
 	return total ~= discovered
 end
 
+local function discovery(total, discovered)
+	if not total then return nil end
+	return total ~= discovered
+end
+
 ---------------------------------------------------------------------------------------------------------------
 --
 ---------------------------------------------------------------------------------------------------------------
@@ -376,28 +372,40 @@ function Entry_Class:Initialize(entryData)
 	zo_mixin(self,  entryData)
 
 	local text = self:GetFormattedName()
-	local icon, selectedIcon = self:GetIcon()
-
-
-	ZO_GamepadEntryData.Initialize(self, text, icon, selectedIcon, highlight, isNew)
+	
+	icon = self:GetIcon()
+	if icon ~= nil then
+	--	self.icon = icon
+	end
+	
+--	ZO_GamepadEntryData.Initialize(self, text, icon, selectedIcon, highlight, isNew)
+	ZO_GamepadEntryData.Initialize(self, text)
 
 	self:AddSubLabel(self:GetSubLabel())
 	self:SetAlphaChangeOnSelection(true)
---	self:SetIconTintOnSelection(true)
+end
+
+function Entry_Class:UpdatePayerCount()
+	local numberPlayers = self.numberPlayers
+	if numberPlayers then
+		numberPlayers = numberPlayers:gsub('%((%d+)%)', '%1')
+		self:SetStackCount(tonumber(numberPlayers))
+	end
 end
 
 function Entry_Class:GetFormattedName()
 	local name = self.textColorZoneName .. self.zoneName
 
-	if (CURRENT_CATEGORY_TYPE == CATEGORY_TYPE_DISPLAYED and self.mapIndex == GetCurrentMapZoneIndex()) and not self.isDungeon then
+	if (CURRENT_CATEGORY_TYPE == CATEGORY_TYPE_DISPLAYED and self.zoneIndex == GetCurrentMapZoneIndex()) and not self.isDungeon then
+		-- Set entries in the current displayed map as displayName
 		name = self.textColorDisplayName .. self.displayName
 	end
 
 	return name
 end
 
-
-function Entry_Class:GetIcon()
+function Entry_Class:GetIcon() -- This may no longer be needed.
+--[[
 	-- overland zones have category == 9
 	local icon = BMU.textures.wayshrineBtn
 
@@ -414,6 +422,8 @@ function Entry_Class:GetIcon()
 	end
 
 	return icon
+	]]
+	return self.icon
 end
 
 function Entry_Class:GetSortOrder()
@@ -424,13 +434,21 @@ function Entry_Class:GetSubLabel()
 	return self.parentZoneName or nil
 end
 
-function Entry_Class:SetName(name)
-	self.text = name
+function Entry_Class:UpdateIcon(icon)
+	self:ClearIcons()
+	self:AddIcon(icon)
+	
+	self.icon = icon
 end
 
 function Entry_Class:UpdateEntryData(mostUsed)
-	self:GetMapData()
+	local icon
+	self.parentZoneId, self.parentZoneName, self.mapId, icon, self.pinDesc, self.pinInfo = IJA_BMU_GAMEPAD_PLUGIN.GetMapInfo(self)
+
+--	self.parentZoneId, self.parentMapId, self.parentZoneName, self.icon, self.pinDesc, self.pinInfo = getMapInfo(self)
+
 	self.unitTag = self:GetGroupUnitTag()
+	self:UpdateIcon(icon)
 
 	-- Lets add some additional data to use for subcategory sorting.
 	if self.houseId then
@@ -440,15 +458,10 @@ function Entry_Class:UpdateEntryData(mostUsed)
 	self.status					= self.status or 0
 	self.isFavorite				= getIsFavorite(self)
 
-
 	local timesUsed = BMU.savedVarsAcc.portCounterPerZone[self.zoneId] or 0
 	self.mostUsed = timesUsed > mostUsed
-
-	self.missingSetItems		= getHasMissingSetItems(self)
-	self.lastUsed				= BMU.has_value(BMU.savedVarsAcc.lastPortedZones, self.zoneId) ~= nil  -- max 20
-
-	self.hasUndiscoveredWayshrines	= discovery(self.zoneWayshrineTotal, self.zoneWayshrineTotal)
-	self.hasUndiscoveredSkyshards	= discovery(self.zoneSkyshardTotal, self.zoneSkyshardDiscovered)
+	
+	self:UpdatePayerCount()
 end
 
 function Entry_Class:UpdateSortOrder()
@@ -490,17 +503,6 @@ function Entry_Class:GetGroupUnitTag()
 				return unitTag
 			end
 		end
-	end
-end
-
-function Entry_Class:GetMapData()
-	local mapData = MAP_DATA_BY_ZONE_ID[self.zoneId]
-
-	if mapData then
-		self.pinInfo = mapData.pinInfo
-		self.parentMapId = mapData.parentMapId
-		self.parentZoneId = mapData.parentZoneId
-		self.zoneDesc = mapData.zoneDesc
 	end
 end
 
@@ -552,7 +554,7 @@ function Entry_Class:Ping()
 		end, delay)
 
 	elseif self.pinInfo then
-		local xLoc, yLoc = self:GetPoiMapPosition()
+		local xLoc, yLoc = self:GetPinMapPosition()
 		PingMap(MAP_PIN_TYPE_RALLY_POINT, MAP_TYPE_LOCATION_CENTERED, xLoc, yLoc)
 	end
 end
@@ -561,22 +563,23 @@ function Entry_Class:GetUnitMapPosition()
 	local xLoc, yLoc, _, isInCurrentMap = GetMapPlayerPosition(self.unitTag)
 	local delay = isInCurrentMap and 0 or 100
 
-	return delay, xLoc, yLoc, isInCurrentMap
+	return delay, xLoc, yLoc
 end
 
-function Entry_Class:GetPoiMapPosition()
+function Entry_Class:GetPinMapPosition()
 	local xLoc, yLoc = GetPOIMapInfo(self.pinInfo.poiZoneIndex, self.pinInfo.poiIndex)
 
 	return xLoc, yLoc
 end
 
+--[[
 function Entry_Class:SetMapToEntry()
 	local mapId = self.mapId or self.parentMapId
 	if mapId then
 		setMapById(mapId)
 	end
 end
-
+]]
 --	--
 function Entry_Class:Get()
 end
@@ -626,7 +629,8 @@ function Entry_Class_Player:GetFormattedName()
 end
 
 function Entry_Class_Player:GetIcon()
-	local icon = BMU.textures.wayshrineBtn
+--	local icon = BMU.textures.wayshrineBtndd
+	local icon
 	if self.unitTag then
 		if IsActiveWorldBattleground() then
 			local battlegroundAlliance = GetUnitBattlegroundAlliance(self.unitTag)
@@ -639,11 +643,33 @@ function Entry_Class_Player:GetIcon()
 				icon = GetRoleIcon(selectedRole)
 			end
 		end
+		
+		self:ClearIcons()
+		self:AddIcon(icon)
 	else
-		icon = Entry_Class.GetIcon(self)
+	--	icon = Entry_Class.GetIcon(self)
 	end
 
 	return icon
+end
+
+function Entry_Class_Player:UpdateIcon(icon)
+	if self.unitTag then
+		if IsActiveWorldBattleground() then
+			local battlegroundAlliance = GetUnitBattlegroundAlliance(self.unitTag)
+			if battlegroundAlliance ~= BATTLEGROUND_ALLIANCE_NONE then
+				icon = GetBattlegroundTeamIcon(battlegroundAlliance)
+			end
+		else
+			local selectedRole = GetGroupMemberSelectedRole(self.unitTag)
+			if selectedRole ~= LFG_ROLE_INVALID then
+				icon = GetRoleIcon(selectedRole)
+			end
+		end
+	end
+	
+	self:ClearIcons()
+	self:AddIcon(icon)
 end
 
 function Entry_Class_Player:GetSubLabel()
@@ -833,3 +859,80 @@ function BMU_Gamepad_EntryData:CreateMultiEntry(data, dataTable)
 	end
 end
 
+
+
+
+--[[
+local missingPinInfo = { -- poiIndex
+	[913] = 9, -- The Mage's Staff/Spellscar
+	[469] = 35 -- Tomb of Apostates
+}
+
+function Entry_Class:JumpToPin()
+	local poiIndex = missingPinInfo[self.zoneId]
+	
+	
+	local function findPinFunction()
+		local majorIndex = GetCurrentMapZoneIndex()
+		if majorIndex and poiIndex then
+			local pin = self:FindPin(majorIndex, poiIndex)
+			
+			if pin then
+				return pin
+			end
+		end
+	--	d( self:FindPinFromZoneName(majorIndex))
+		return self:FindPinFromZoneName(majorIndex)
+	end
+
+	ZO_WorldMap_GetPanAndZoom():JumpToPinWhenAvailable(findPinFunction)
+end
+
+function Entry_Class:FindPinFromZoneName(majorIndex)
+	local result, match
+
+	local zoneName = self.zoneName:lower()
+	for i = 1, GetNumPOIs(majorIndex) do 
+        local poiName, _, poiStartDesc, poiFinishedDesc = GetPOIInfo(majorIndex, i)
+		if poiName ~= '' and not poiName:match(wayShrineString) then
+		
+			local score = compareNames(poiName:lower(), zoneName)
+
+		--	d( 'poiName', poiName)
+
+			if score then
+				if not match or score < match then
+					match = score
+					result = i
+				end
+			end
+		end
+    end
+	
+		d( result)
+	if match then
+	--	local poiPinType, icon = select(e, GetPOIMapInfo(majorIndex, result))
+		return self:FindPin(majorIndex, result)
+	end
+	return false
+end
+
+function Entry_Class:FindPin(majorIndex, keyIndex)
+    local lookupTable = ZO_WorldMap_GetPinManager().m_keyToPinMapping['poi']
+    local keys
+    if majorIndex then
+        keys = lookupTable[majorIndex]
+    end
+
+    if keys then
+        local pinKey
+        if keyIndex then
+            pinKey = keys[keyIndex]
+        end
+
+        if pinKey then
+            return ZO_WorldMap_GetPinManager():GetActiveObject(pinKey)
+        end
+    end
+end
+]]
