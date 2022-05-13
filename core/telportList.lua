@@ -1,6 +1,8 @@
 local addon = IJA_BMU_GAMEPAD_PLUGIN
 local TeleportClass_Shared = addon.subclassTable.list_Shared
 
+local GPS = LibGPS3
+
 ---------------------------------------------------------------------------------------------------------------
 -- Teleport list
 ---------------------------------------------------------------------------------------------------------------
@@ -88,7 +90,7 @@ local function isTargetPlayer(socialData)
 end
 
 ---------------------------------------------------------------------------------------------------------------
--- 
+--
 ---------------------------------------------------------------------------------------------------------------
 local teleportList = TeleportClass_Shared:Subclass()
 
@@ -165,7 +167,6 @@ function teleportList:InitializeKeybindDescriptor()
 			keybind = "UI_SHORTCUT_SECONDARY",
 			callback = function()
 				local targetData = self:GetTargetData()
-
 				targetData:Ping()
 				PlaySound(SOUNDS.MAP_LOCATION_CLICKED)
 			end,
@@ -227,19 +228,8 @@ function teleportList:GetCurrentCategory()
 	return self.owner.categoryList:GetTargetData()
 end
 
-function teleportList:OnSelectedDataChangedCallback(selectedData)
-	if hasDataChanged(selectedData) then
-		g_selectedData = selectedData
-
-		self:SetMapToTarget(selectedData)
-		d( selectedData.zoneName)
-	end
-	
-	self:UpdateTooltip(selectedData)
-end
-
 ---------------------------------------------------------------------------------------------------------------
--- 
+--
 ---------------------------------------------------------------------------------------------------------------
 function teleportList:BuildOptionsList()
 	local function ShouldAddPlayerOption()
@@ -291,7 +281,7 @@ function teleportList:BuildPlayerOptionsList()
 	local function ShouldAddPlayerOption()
 		return self:ShouldAddPlayerOption()
 	end
-	
+
 	local function BuildIgnoreOption()
 		local callback = function()
 			ZO_Dialogs_ReleaseAllDialogsOfName("BMU_GAMEPAD_SOCIAL_OPTIONS_DIALOG")
@@ -381,13 +371,13 @@ function teleportList:BuildVoteKickMemberOption()
 end
 
 function teleportList:AddInviteToGuildOptionTemplates()
-    local guildCount = GetNumGuilds()
+	local guildCount = GetNumGuilds()
 
-    if guildCount > 0 then
-        local guildInviteGroupingId = self:AddOptionTemplateGroup(function() return GetString(SI_GAMEPAD_CONTACTS_INVITE_TO_GUILD_HEADER) end)
-        for i = 1, guildCount do
-            local guildId = GetGuildId(i)
-            local buildFunction = function() return self:BuildGuildInviteOption(nil, guildId) end
+	if guildCount > 0 then
+		local guildInviteGroupingId = self:AddOptionTemplateGroup(function() return GetString(SI_GAMEPAD_CONTACTS_INVITE_TO_GUILD_HEADER) end)
+		for i = 1, guildCount do
+			local guildId = GetGuildId(i)
+			local buildFunction = function() return self:BuildGuildInviteOption(nil, guildId) end
 			local function visibleFunction()
 				if guildId ~= 0 and DoesPlayerHaveGuildPermission(guildId, GUILD_PERMISSION_INVITE) and self.socialData.displayName ~= '' then
 					return GetGuildMemberIndexFromDisplayName(guildId, self.socialData.displayName) == nil
@@ -395,17 +385,17 @@ function teleportList:AddInviteToGuildOptionTemplates()
 
 				return false
 			end
-            self:AddOptionTemplate(guildInviteGroupingId, buildFunction, visibleFunction)
+			self:AddOptionTemplate(guildInviteGroupingId, buildFunction, visibleFunction)
 		end
 	end
 end
 
 function teleportList:BuildGuildInviteOption(header, guildId)
-    local inviteFunction = function()
-            ZO_TryGuildInvite(guildId, self.socialData.displayName)
-        end
+	local inviteFunction = function()
+			ZO_TryGuildInvite(guildId, self.socialData.displayName)
+		end
 
-    return self:BuildOptionEntry(header, GetGuildName(guildId), inviteFunction, nil, GetLargeAllianceSymbolIcon(GetGuildAlliance(guildId)))
+	return self:BuildOptionEntry(header, GetGuildName(guildId), inviteFunction, nil, GetLargeAllianceSymbolIcon(GetGuildAlliance(guildId)))
 end
 
 function teleportList:ShouldAddPlayerOption()
@@ -413,7 +403,7 @@ function teleportList:ShouldAddPlayerOption()
 end
 
 ---------------------------------------------------------------------------------------------------------------
--- 
+--
 ---------------------------------------------------------------------------------------------------------------
 function teleportList:ToggleBUISetting(index, checked, key)
 	local savedVars = BMU.savedVarsServ[index]
@@ -437,10 +427,8 @@ end
 
 function teleportList:Refresh()
 	if self.fragment:IsHidden() then return end
-	g_selectedData = self:GetTargetData()
+--	g_selectedData = self:GetTargetData()
 
-	local orig_Callback = self.onSelectedDataChangedCallback
-	
 	self:Clear()
 	local selectedIndex
 
@@ -467,24 +455,27 @@ function teleportList:Refresh()
 		if lastHeader ~= header then
 			lastHeader = header
 			entry:SetHeader(header)
-			self:AddEntry("ZO_GamepadMenuEntryTemplateLowercase42WithHeader", entry)
+
+			self:AddEntryWithHeader("ZO_GamepadMenuEntryTemplateLowercase42", entry)
 		else
+
 			self:AddEntry("ZO_GamepadMenuEntryTemplateLowercase42", entry)
 		end
 	end
-	
-    local DEFAULT_RESELECT = nil
-    local BLOCK_SELECTION_CHANGED_CALLBACK = not self.isMoving and selectedIndex ~= nil
+
+	local BLOCK_SELECTION_CHANGED_CALLBACK = not self.isMoving and selectedIndex ~= nil
+--	local DEFAULT_RESELECT = selectedIndex == nil
+	local DEFAULT_RESELECT = nil
 	-- In order to prevent the map from changing on data update we will block the callback unless selections are being made while updating.
 	self:Commit(DEFAULT_RESELECT, BLOCK_SELECTION_CHANGED_CALLBACK)
-	
+
 	if selectedIndex then
 		local ALLOW_IF_DISABLED = true
 		self:SetSelectedIndex(selectedIndex, ALLOW_IF_DISABLED)
 		self:RefreshVisible() -- Force the previous selection to take place immediately.
-	else
+	elseif g_selectedData == nil then
 		-- If the currently selected list item no longer exists, lets not reset to top.
-	--	self:SetSelectedIndex(1)
+		self:SetSelectedIndex(1)
 	end
 
 	self:RefreshNoEntriesLabel()
@@ -492,7 +483,7 @@ function teleportList:Refresh()
 end
 
 ---------------------------------------------------------------------------------------------------------------
--- 
+--
 ---------------------------------------------------------------------------------------------------------------
 function teleportList:PanAndZoomToPin()
 	local selectedData = self.selectedData
@@ -501,28 +492,81 @@ function teleportList:PanAndZoomToPin()
 		local pinInfo = selectedData.pinInfo
 
 		if selectedData.unitTag and self.owner.savedVars.panToGroupMember then
-			local delay, xLoc, yLoc, isInCurrentMap = selectedData:GetUnitMapPosition()
+			local delay, xLoc, yLoc = selectedData:GetUnitMapPosition()
 
 			zo_callLater(function()
 				ZO_WorldMap_PanToNormalizedPosition(xLoc, yLoc)
 			end, delay)
 		elseif pinInfo then
 			zo_callLater(function()
-				local xLoc, yLoc = GetPOIMapInfo(pinInfo.poiZoneIndex, pinInfo.poiIndex)
+				local xLoc, yLoc = selectedData:GetPinMapPosition()
 				ZO_WorldMap_PanToNormalizedPosition(xLoc, yLoc)
 			end, 100)
 		end
 	end
 end
 
-teleportList.SetMapToTarget = JO_UpdateBuffer_Simple('IJA_BMU_Gamepad_SetMapToTarget', function(self, selectedData)
+local setMapById = ZO_WorldMap_SetMapById
+if not setMapById then
+	setMapById = function(mapId)
+		GPS:SetPlayerChoseCurrentMap()
+		SetMapToMapId(mapId)
+		CALLBACK_MANAGER:FireCallbacks("OnWorldMapChanged")
+	end
+end
+
+function teleportList:SetMapToTarget(selectedData)
+	d( selectedData)
+	g_onWorldMapChanged_SetMapToTarget = true
+	setMapById(selectedData.mapId)
+end
+
+teleportList.OnSelectedDataChangedCallback = JO_UpdateBuffer_Simple('IJA_BMU_Gamepad_SetMapToTarget', function(self, selectedData)
+	if self.isMoving then
+		return self:OnSelectedDataChangedCallback(selectedData)
+	end
+	
+	if selectedData and hasDataChanged(selectedData) then
+		g_selectedData = selectedData
+		self:SetMapToTarget(selectedData)
+	end
+
+	self:UpdateTooltip(selectedData)
+end)
+--end, 200)
+
+function teleportList:ResetSelectedData()
+	g_selectedData = nil
+end
+
+
+--[[
+function teleportList:SetMapToTarget(selectedData)
 	g_onWorldMapChanged_SetMapToTarget = true
 	local mapId = selectedData.mapId or selectedData.parentMapId
 	self.selectedData:SetMapToEntry(mapId)
+end
+
+function teleportList:OnSelectedDataChangedCallback(selectedData)
+	if hasDataChanged(selectedData) then
+		g_selectedData = selectedData
+
+		self:SetMapToTarget(selectedData)
+		d( selectedData.zoneName)
+	end
+
+	self:UpdateTooltip(selectedData)
+end
+
+teleportList.SetMapToTarget = JO_UpdateBuffer_Simple('IJA_BMU_Gamepad_SetMapToTarget', function(self, selectedData)
+	g_onWorldMapChanged_SetMapToTarget = true
+	setMapById(selectedData.mapId)
 end, 200)
+]]
+
 
 ---------------------------------------------------------------------------------------------------------------
--- 
+--
 ---------------------------------------------------------------------------------------------------------------
 addon.subclassTable.teleportList = teleportList
 
